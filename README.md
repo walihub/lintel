@@ -3,6 +3,7 @@
 和[Challenger AI](https://challenger.ai/competition/mlsv2018)
 比赛中使用的视频软解工具，修改[lintel](https://github.com/dukebw/lintel)部分代码，修改内容包括：
 - 将视频的读取方式由读取内存改为读文件
+- 增加读取关键帧数目功能
 - 只解码视频I帧
 
 # lintel
