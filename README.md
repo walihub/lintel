@@ -1,4 +1,4 @@
-# modified_lintel
+# lintel
 根据比赛需求修改[lintel](https://github.com/dukebw/lintel)部分代码，只解码视频I帧。
 
 [MTSVRC](https://challenge.ai.meitu.com/mtsvrc2018/introduction.html)
