@@ -1,10 +1,8 @@
 # lintel
-根据比赛需求修改[lintel](https://github.com/dukebw/lintel)部分代码，只解码视频I帧。
-
-[MTSVRC](https://challenge.ai.meitu.com/mtsvrc2018/introduction.html)
-
-[Challenger AI](https://challenger.ai/competition/mlsv2018)
-
+参加[MTSVRC](https://challenge.ai.meitu.com/mtsvrc2018/introduction.html)[Challenger AI](https://challenger.ai/competition/mlsv2018)
+比赛中使用的视频软解工具，修改[lintel](https://github.com/dukebw/lintel)部分代码，修改内容包括：
+- 将视频的读取方式由读取内存改为读文件
+- 只解码视频I帧
 
 # lintel
 [![Anaconda badge](https://anaconda.org/conda-forge/lintel/badges/version.svg)](https://anaconda.org/conda-forge/lintel)
