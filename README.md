@@ -65,13 +65,6 @@ Run the following to install a locally editable version of the library, with pip
 `pip3 install --editable . --user`
 
 
-## Conda
-
-Run: `conda install -c conda-forge lintel`.
-
-Only Mac and Linux are supported.
-
-
 # Testing Lintel
 
 1. After installing, run:
