@@ -20,5 +20,5 @@ import _lintel
 
 loadvid = _lintel.loadvid
 loadvid_frame_nums = _lintel.loadvid_frame_nums
-loadvid_frame_index = _lintel.loadvid_frame_index
-get_num_gops = _lintel.get_num_gops
+# loadvid_frame_index = _lintel.loadvid_frame_index
+loadvid_frame_count = _lintel.loadvid_frame_count

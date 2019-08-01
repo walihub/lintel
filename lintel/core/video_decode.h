@@ -216,8 +216,9 @@ decode_video_from_frame_nums(uint8_t *dest,
                              const int32_t *frame_numbers,
                              uint32_t *rewidth,
                              uint32_t *reheight,
+                             bool should_key,
                              bool should_seek);
 int32_t
-count_frames(struct video_stream_context *vid_ctx);
+get_video_keyframe_count(struct video_stream_context *vid_ctx);
 
 #endif // _VIDEO_DECODE_H_
