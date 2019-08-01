@@ -7,8 +7,8 @@
 - 增加解码与帧序号最近的关键帧功能
 
 # TODO
- - [] center crop
- - [] normalized
+ - [ ] center crop
+ - [ ] normalized
 
 
 # lintel
