@@ -30,7 +30,7 @@ with open(filename, 'rb') as f:
 
     start = time.perf_counter()
     for _ in range(20):
-        frame_count = lintel.loadvid_frame_count(filename)
+        frame_count = lintel.frame_count(filename)
         print(frame_count)
         frame_nums = list(range(0, frame_count, int(frame_count/5)))
         # frame_nums = [400, 955]
