@@ -193,7 +193,8 @@ alloc_pyarray(const uint32_t out_size_bytes)
 //         if (vid_ctx->frame == NULL)
 //                 goto clean_up_avcodec;
 
-//         return LOADVID_SUCCESS;
+//         return 
+_SUCCESS;
 
 // clean_up_avcodec:
 //         avcodec_close(vid_ctx->codec_context);
@@ -543,12 +544,12 @@ clean_up:
 }
 
 static PyObject *
-loadvid_frame_count(PyObject *self, PyObject *args, PyObject *kw)
+frame_count(PyObject *self, PyObject *args, PyObject *kw)
 {
         const char *filename = NULL;
         int32_t should_key = false;
-        int64_t frame_count = 0;
-        int32_t gop_count = 0;
+        int64_t frame_num = 0;
+        int32_t gop_num = 0;
 
         static char *kwlist[] = {"filename",
                                  "shoule_key",
@@ -556,7 +557,7 @@ loadvid_frame_count(PyObject *self, PyObject *args, PyObject *kw)
 
         if (!PyArg_ParseTupleAndKeywords(args,
                                          kw,
-                                         "s|p:get_video_keyframe_count",
+                                         "s|p:get_video_keyframe_num",
                                          kwlist,
                                          &filename,
                                          &should_key))
@@ -567,19 +568,19 @@ loadvid_frame_count(PyObject *self, PyObject *args, PyObject *kw)
         if (status != LOADVID_SUCCESS) {
                 return NULL;
         }
-        frame_count = vid_ctx.nb_frames;
+        frame_num = vid_ctx.nb_frames;
         if (should_key)
         {
-                gop_count = get_video_keyframe_count(&vid_ctx);
+                gop_num = get_video_keyframe_count(&vid_ctx);
         }
         clean_up_vid_ctx(&vid_ctx);
         
         /* return result */
         if (should_key)
         {
-                return Py_BuildValue("ii", frame_count, gop_count);       
+                return Py_BuildValue("ii", frame_num, gop_num);       
         }
-        return Py_BuildValue("i", frame_count);
+        return Py_BuildValue("i", frame_num);
 }
 
 
@@ -700,12 +701,12 @@ static PyMethodDef lintel_methods[] = {
                    "tuple(decoded video ByteArray object, width, height)\n"
                    "if width and height are not passed as arguments, and resize is zero.")},
 
-        {"loadvid_frame_count",
-         (PyCFunction)loadvid_frame_count,
+        {"frame_count",
+         (PyCFunction)frame_count,
          METH_VARARGS | METH_KEYWORDS,
-         PyDoc_STR("loadvid_frame_count(filename, should_key) -> "
-                   "frame_count or\n"
-                   "tuple(frame_count and gop_count)\n"
+         PyDoc_STR("frame_count(filename, should_key) -> "
+                   "frame_num or\n"
+                   "tuple(frame_num and gop_num)\n"
                    "if should_key is not passed as arguments")},
         {NULL, NULL, 0, NULL}
 };
