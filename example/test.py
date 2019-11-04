@@ -25,33 +25,42 @@ width = 540
 height = 964
 
 filename = '1000016779.mp4'
+
+# mid = '4381637503064245'
+# mid = '4170752687854745'
+# filename = '/data7/chenghao8/data/sfst/' + mid[-2:] + '0/' + mid + '.mp4'
 with open(filename, 'rb') as f:
     encoded_video = f.read()
 
     start = time.perf_counter()
     for _ in range(20):
         frame_count = lintel.frame_count(filename)
+        # frame_count = 300
         print(frame_count)
         frame_nums = list(range(0, frame_count, int(frame_count/5)))
         # frame_nums = [400, 955]
         print(frame_nums)
         # frame_nums = [1, 20, 40]
-        result = lintel.loadvid_frame_nums(filename,
-                                            frame_nums=frame_nums,
-                                            width=width,
-                                            height=height,
-                                            should_key=True,
-                                            should_seek=True
-                                            )
-        
-        # decoded_frames, width, height = result
-        # print("width: ", width)
-        # print("height: ", height)
-        decoded_frames = result
+        try:
+            result = lintel.loadvid_frame_nums(filename,
+                                                frame_nums=frame_nums,
+                                                resize=224,
+                                                # width=width,
+                                                # height=height,
+                                                # should_key=True,
+                                                should_seek=True
+                                                )
+            decoded_frames, width, height = result
+            print("width: ", width)
+            print("height: ", height)
+            # print(result)
+            # decoded_frames = result
 
-        decoded_frames = np.frombuffer(decoded_frames, dtype=np.uint8)
-        decoded_frames = np.reshape(decoded_frames,
-                                    newshape=(len(frame_nums), height, width, 3))
+            decoded_frames = np.frombuffer(decoded_frames, dtype=np.uint8)
+            decoded_frames = np.reshape(decoded_frames,
+                                        newshape=(len(frame_nums), height, width, 3))
+        except Exception as err:
+            print('error', str(err))
     end = time.perf_counter()
 
     print('time: {}'.format((end - start)/20))
