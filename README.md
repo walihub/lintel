@@ -1,17 +1,4 @@
 # lintel
-参加[MTSVRC](https://challenge.ai.meitu.com/mtsvrc2018/introduction.html)
-和[Challenger AI](https://challenger.ai/competition/mlsv2018)
-比赛中使用的视频软解工具，修改[lintel](https://github.com/dukebw/lintel)部分代码，修改内容包括：
-- 将视频的读取方式由读取内存改为读文件
-- 增加读取视频帧、关键帧数目接口
-- 增加解码与帧序号最近的关键帧功能
-
-# TODO
- - [ ] center crop
- - [ ] normalized
-
-
-# lintel
 [![Anaconda badge](https://anaconda.org/conda-forge/lintel/badges/version.svg)](https://anaconda.org/conda-forge/lintel)
 
 Lintel is a Python module that can be used to decode videos, and return a byte
@@ -68,6 +55,13 @@ Installing FFmpeg from Source section below to install a newer version.
 Run the following to install a locally editable version of the library, with pip:
 
 `pip3 install --editable . --user`
+
+
+## Conda
+
+Run: `conda install -c conda-forge lintel`.
+
+Only Mac and Linux are supported.
 
 
 # Testing Lintel

@@ -26,14 +26,17 @@ import lintel
 def _loadvid_test_vanilla(filename, width, height):
     """Tests the usual loadvid call.
 
-    The input file, is repeatedly
+    The input file, an encoded video corresponding to `filename`, is repeatedly
     decoded (with a random seek). The first and last of the returned frames are
     plotted using `matplotlib.pyplot`.
     """
+    with open(filename, 'rb') as f:
+        encoded_video = f.read()
+
     num_frames = 32
     for _ in range(10):
         start = time.perf_counter()
-        result = lintel.loadvid(filename,
+        result = lintel.loadvid(encoded_video,
                                 should_random_seek=True,
                                 width=width,
                                 height=height,
@@ -61,9 +64,7 @@ def _loadvid_test_vanilla(filename, width, height):
 def _loadvid_test_frame_nums(filename,
                              width,
                              height,
-                             resize,
                              start_frame,
-                             should_ley,
                              should_seek):
     """Tests loadvid_frame_nums Python extension.
 
@@ -75,7 +76,9 @@ def _loadvid_test_frame_nums(filename,
     chosen frames with `loadvid_frame_nums`, and visualizes the resulting
     frames (all of them) using `matplotlib.pyplot`.
     """
- 
+    with open(filename, 'rb') as f:
+        encoded_video = f.read()
+
     num_frames = 32
     for _ in range(10):
         start = time.perf_counter()
@@ -83,15 +86,13 @@ def _loadvid_test_frame_nums(filename,
         i = start_frame
         frame_nums = []
         for _ in range(num_frames):
-            frame_nums.append(i)
             i += int(random.uniform(1, 4))
+            frame_nums.append(i)
 
         result = lintel.loadvid_frame_nums(encoded_video,
                                            frame_nums=frame_nums,
                                            width=width,
                                            height=height,
-                                           resize=resize,
-                                           should_key=should_key,
                                            should_seek=should_seek)
 
         if (width == 0) and (height == 0):
@@ -126,10 +127,6 @@ def _loadvid_test_frame_nums(filename,
               default=None,
               type=int,
               help='The _exact_ width of the input video.')
-@click.option('--resize',
-              default=None,
-              type=int,
-              help='The size of the input video after resize.')
 @click.option('--frame-nums',
               'test_name',
               flag_value='frame_nums',
@@ -169,7 +166,5 @@ def loadvid_test(dynamic_size,
         _loadvid_test_frame_nums(filename,
                                  width,
                                  height,
-                                 resize,
-                                 should_key,
                                  start_frame,
                                  should_seek)

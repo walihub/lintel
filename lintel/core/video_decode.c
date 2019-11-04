@@ -1,20 +1,17 @@
 /**
  * Copyright 2018 Brendan Duke.
- *
- * This file is part of Lintel.
- *
- * Lintel is free software: you can redistribute it and/or modify it under the
- * terms of the GNU General Public License as published by the Free Software
- * Foundation, either version 3 of the License, or (at your option) any later
- * version.
- *
- * Lintel is distributed in the hope that it will be useful, but WITHOUT ANY
- * WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
- * FOR A PARTICULAR PURPOSE. See the GNU General Public License for more
- * details.
- *
- * You should have received a copy of the GNU General Public License along with
- * Lintel. If not, see <http://www.gnu.org/licenses/>.
+ * 
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ * 
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ * 
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 #include "video_decode.h"
 #include <assert.h>
@@ -23,6 +20,7 @@
 #include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
+
 /**
  * Receives a complete frame from the video stream in format_context that
  * corresponds to video_stream_index.
@@ -132,8 +130,7 @@ allocate_rgb_image(AVCodecContext *codec_context)
                                 frame_rgb->height,
                                 AV_PIX_FMT_RGB24,
                                 32);
-        if (status < 0)
-        {
+        if (status < 0) {
                 av_frame_free(&frame_rgb);
                 return NULL;
         }
@@ -162,8 +159,7 @@ allocate_resize_rgb_image(AVCodecContext *codec_context, uint32_t rewidth, uint3
                                 frame_rgb->height,
                                 AV_PIX_FMT_RGB24,
                                 32);
-        if (status < 0)
-        {
+        if (status < 0) {
                 av_frame_free(&frame_rgb);
                 return NULL;
         }
@@ -195,7 +191,7 @@ copy_next_frame(uint8_t *dest,
                 const uint32_t bytes_per_row)
 {
         sws_scale(sws_context,
-                  (const uint8_t *const *)(frame->data),
+                  (const uint8_t * const *)(frame->data),
                   frame->linesize,
                   0,
                   codec_context->height,
@@ -206,8 +202,7 @@ copy_next_frame(uint8_t *dest,
         int32_t row_index;
         for (row_index = 0;
              row_index < frame_rgb->height;
-             ++row_index)
-        {
+             ++row_index) {
                 memcpy(dest + copied_bytes, next_row, bytes_per_row);
 
                 next_row += frame_rgb->linesize[0];
@@ -234,19 +229,17 @@ loop_to_buffer_end(uint8_t *dest,
                    uint32_t bytes_per_frame,
                    int32_t num_requested_frames)
 {
-        // fprintf(stderr, "Ran out of frames. Looping.\n");
-        if (frame_number == 0)
-        {
-                // fprintf(stderr, "No frames received after seek.\n");
+        fprintf(stderr, "Ran out of frames. Looping.\n");
+        if (frame_number == 0) {
+                fprintf(stderr, "No frames received after seek.\n");
                 return;
         }
 
         uint32_t bytes_to_copy = copied_bytes;
         int32_t remaining_frames = (num_requested_frames - frame_number);
-        while (remaining_frames > 0)
-        {
+        while (remaining_frames > 0) {
                 if (remaining_frames < frame_number)
-                        bytes_to_copy = remaining_frames * bytes_per_frame;
+                        bytes_to_copy = remaining_frames*bytes_per_frame;
 
                 memcpy(dest + copied_bytes, dest, bytes_to_copy);
 
@@ -255,9 +248,10 @@ loop_to_buffer_end(uint8_t *dest,
         }
 }
 
-void decode_video_to_out_buffer(uint8_t *dest,
-                                struct video_stream_context *vid_ctx,
-                                int32_t num_requested_frames)
+void
+decode_video_to_out_buffer(uint8_t *dest,
+                           struct video_stream_context *vid_ctx,
+                           int32_t num_requested_frames)
 {
         AVCodecContext *codec_context = vid_ctx->codec_context;
         struct SwsContext *sws_context = sws_getContext(codec_context->width,
@@ -275,17 +269,15 @@ void decode_video_to_out_buffer(uint8_t *dest,
         AVFrame *frame_rgb = allocate_rgb_image(codec_context);
         assert(frame_rgb != NULL);
 
-        const uint32_t bytes_per_row = 3 * frame_rgb->width;
-        const uint32_t bytes_per_frame = bytes_per_row * frame_rgb->height;
+        const uint32_t bytes_per_row = 3*frame_rgb->width;
+        const uint32_t bytes_per_frame = bytes_per_row*frame_rgb->height;
         uint32_t copied_bytes = 0;
         int32_t frame_number;
         for (frame_number = 0;
              frame_number < num_requested_frames;
-             ++frame_number)
-        {
+             ++frame_number) {
                 int32_t status = receive_frame(vid_ctx);
-                if (status == VID_DECODE_EOF)
-                {
+                if (status == VID_DECODE_EOF) {
                         loop_to_buffer_end(dest,
                                            copied_bytes,
                                            frame_number,
@@ -313,9 +305,13 @@ void decode_video_to_out_buffer(uint8_t *dest,
 int32_t read_memory(void *opaque, uint8_t *buffer, int32_t buf_size_bytes)
 {
         struct buffer_data *input_buf = (struct buffer_data *)opaque;
-        int32_t bytes_remaining = (input_buf->total_size_bytes -
-                                   input_buf->offset_bytes);
-        if (bytes_remaining < buf_size_bytes)
+        size_t bytes_remaining = (input_buf->total_size_bytes -
+                                  input_buf->offset_bytes);
+        if (bytes_remaining < (size_t)buf_size_bytes)
+                /**
+                 * NOTE(brendan): buf_size_bytes is assumed to fit in int32
+                 * here, so no overflow.
+                 */
                 buf_size_bytes = bytes_remaining;
 
         memcpy(buffer,
@@ -332,8 +328,7 @@ int64_t seek_memory(void *opaque, int64_t offset64, int32_t whence)
         struct buffer_data *input_buf = (struct buffer_data *)opaque;
         int32_t offset = (int32_t)offset64;
 
-        switch (whence)
-        {
+        switch (whence) {
         case SEEK_CUR:
                 input_buf->offset_bytes += offset;
                 break;
@@ -364,8 +359,8 @@ int64_t seek_memory(void *opaque, int64_t offset64, int32_t whence)
 static AVInputFormat *
 probe_input_format(struct buffer_data *input_buf, const uint32_t buffer_size)
 {
-        const int32_t probe_buf_size_bytes = (buffer_size +
-                                              AVPROBE_PADDING_SIZE);
+        const uint32_t probe_buf_size_bytes = (buffer_size +
+                                               AVPROBE_PADDING_SIZE);
         AVProbeData probe_data = {NULL,
                                   (uint8_t *)av_malloc(probe_buf_size_bytes),
                                   probe_buf_size_bytes,
@@ -395,12 +390,11 @@ static int32_t
 find_video_stream_index(AVFormatContext *format_context)
 {
         AVStream *video_stream;
-
+    
         uint32_t stream_index;
         for (stream_index = 0;
              stream_index < format_context->nb_streams;
-             ++stream_index)
-        {
+             ++stream_index) {
                 video_stream = format_context->streams[stream_index];
 
                 if (video_stream->codecpar->codec_type == AVMEDIA_TYPE_VIDEO)
@@ -427,26 +421,25 @@ setup_format_context(AVFormatContext **format_context_ptr,
 
         int32_t status = avformat_open_input(format_context_ptr,
                                              "",
-                                             format_context->iformat,
+                                             NULL,
                                              NULL);
-        if (status < 0)
-        {
+        if (status < 0) {
                 fprintf(stderr,
                         "AVERROR: %d, message: %s\n",
                         status,
 #ifdef __cplusplus
                         "");
 #else
-                        av_err2str(status));
+                       av_err2str(status));
 #endif // __cplusplus
                 return VID_DECODE_FFMPEG_ERR;
         }
+
         status = avformat_find_stream_info(format_context, NULL);
         assert(status >= 0);
 
         return find_video_stream_index(format_context);
 }
-
 
 AVCodecContext *open_video_codec_ctx(AVStream *video_stream)
 {
@@ -464,15 +457,13 @@ AVCodecContext *open_video_codec_ctx(AVStream *video_stream)
 
         status = avcodec_parameters_to_context(codec_context,
                                                video_stream->codecpar);
-        if (status != 0)
-        {
+        if (status != 0) {
                 avcodec_free_context(&codec_context);
                 return NULL;
         }
 
         status = avcodec_open2(codec_context, video_codec, NULL);
-        if (status != 0)
-        {
+        if (status != 0) {
                 avcodec_free_context(&codec_context);
                 return NULL;
         }
@@ -491,7 +482,7 @@ seek_to_closest_keypoint(float *seek_distance_out,
 
         int64_t start_time;
         AVStream *video_stream =
-            vid_ctx->format_context->streams[vid_ctx->video_stream_index];
+                vid_ctx->format_context->streams[vid_ctx->video_stream_index];
         /**
          * TODO(brendan): Do something smarter to guess the start time, if the
          * container doesn't have it?
@@ -535,7 +526,7 @@ seek_to_closest_keypoint(float *seek_distance_out,
         /**
          * TODO(brendan): This seek distance is off by one frame...
          */
-        float seek_distance = ((double)timestamp * tb_num) / tb_den;
+        float seek_distance = ((double)timestamp*tb_num)/tb_den;
         if (seek_distance_out != NULL)
                 *seek_distance_out = seek_distance;
 
@@ -554,37 +545,16 @@ skip_past_timestamp(struct video_stream_context *vid_ctx, int64_t timestamp)
         if (timestamp == AV_NOPTS_VALUE)
                 return VID_DECODE_SUCCESS;
 
-        do
-        {
+        do {
                 int32_t status = receive_frame(vid_ctx);
-                if (status < 0)
-                {
-                        // fprintf(stderr, "Ran out of frames during seek.\n");
+                if (status < 0) {
+                        fprintf(stderr, "Ran out of frames during seek.\n");
                         return status;
                 }
                 assert(status == VID_DECODE_SUCCESS);
         } while (vid_ctx->frame->pts < timestamp);
 
         return VID_DECODE_SUCCESS;
-}
-
-int32_t
-get_video_keyframe_count(struct video_stream_context *vid_ctx)
-{
-        AVPacket packet;
-        av_init_packet(&packet);
-        int32_t gop_num = 0;
-
-        while ((av_read_frame(vid_ctx->format_context, &packet) == 0))
-        {
-                if (packet.stream_index == vid_ctx->video_stream_index && packet.flags == AV_PKT_FLAG_KEY)
-                {
-                        ++gop_num;
-                }
-                av_packet_unref(&packet);
-        }
-        av_packet_unref(&packet);
-        return gop_num;
 }
 
 void decode_video_from_frame_nums(uint8_t *dest,
@@ -771,4 +741,25 @@ out_free_frame_rgb_and_sws:
         av_freep(frame_rgb->data);
         av_frame_free(&frame_rgb);
         sws_freeContext(sws_context);
+}
+
+
+int64_t
+get_keyframe_count(struct video_stream_context *vid_ctx)
+{
+
+        AVPacket packet;
+        av_init_packet(&packet);
+        int64_t gop_num = 0;
+
+        while ((av_read_frame(vid_ctx->format_context, &packet) == 0))
+        {
+                if (packet.stream_index == vid_ctx->video_stream_index && packet.flags == AV_PKT_FLAG_KEY)
+                {
+                        ++gop_num;
+                }
+                av_packet_unref(&packet);
+        }
+        av_packet_unref(&packet);
+        return gop_num;
 }
