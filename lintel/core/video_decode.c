@@ -598,7 +598,6 @@ void decode_video_from_frame_nums(uint8_t *dest,
 {
         if (num_requested_frames <= 0)
                 return;
-
         AVCodecContext *codec_context = vid_ctx->codec_context;
         struct SwsContext *sws_context = sws_getContext(codec_context->width,
                                                         codec_context->height,
@@ -610,6 +609,7 @@ void decode_video_from_frame_nums(uint8_t *dest,
                                                         NULL,
                                                         NULL,
                                                         NULL);
+            
         assert(sws_context != NULL);
 
         // resize image
@@ -735,7 +735,7 @@ void decode_video_from_frame_nums(uint8_t *dest,
                                                    num_requested_frames);
                                 printf("FFmpeg get frame error.\n");
                                 goto out_free_frame_rgb_and_sws;
-                                
+
                         }
 
                         /**
