@@ -20,6 +20,7 @@
 #include <assert.h>
 #include <math.h>
 #include <stdio.h>
+#include <Python.h>
 #include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
@@ -270,10 +271,16 @@ void decode_video_to_out_buffer(uint8_t *dest,
                                                         NULL,
                                                         NULL,
                                                         NULL);
-        assert(sws_context != NULL);
+        // assert(sws_context != NULL);
+        if (sws_context == NULL) {
+                        PyErr_SetString(PyExc_IOError, "Video get context error.");
+        }
 
         AVFrame *frame_rgb = allocate_rgb_image(codec_context);
-        assert(frame_rgb != NULL);
+        // assert(frame_rgb != NULL);
+        if (frame_rgb == NULL) {
+                        PyErr_SetString(PyExc_IOError, "Video get frame rgb error.");
+        }
 
         const uint32_t bytes_per_row = 3 * frame_rgb->width;
         const uint32_t bytes_per_frame = bytes_per_row * frame_rgb->height;
@@ -284,7 +291,7 @@ void decode_video_to_out_buffer(uint8_t *dest,
              ++frame_number)
         {
                 int32_t status = receive_frame(vid_ctx);
-                if (status == VID_DECODE_EOF)
+                if (status == VID_DECODE_EOF || status != VID_DECODE_SUCCESS)
                 {
                         loop_to_buffer_end(dest,
                                            copied_bytes,
@@ -293,7 +300,7 @@ void decode_video_to_out_buffer(uint8_t *dest,
                                            num_requested_frames);
                         break;
                 }
-                assert(status == VID_DECODE_SUCCESS);
+                // assert(status == VID_DECODE_SUCCESS);
 
                 copied_bytes = copy_next_frame(dest,
                                                vid_ctx->frame,
@@ -370,7 +377,11 @@ probe_input_format(struct buffer_data *input_buf, const uint32_t buffer_size)
                                   (uint8_t *)av_malloc(probe_buf_size_bytes),
                                   probe_buf_size_bytes,
                                   NULL};
-        assert(probe_data.buf != NULL);
+        // assert(probe_data.buf != NULL);
+        if (probe_data.buf == NULL) {
+                        PyErr_SetString(PyExc_IOError, "Probedata error.");
+        }
+        
 
         memset(probe_data.buf, 0, probe_buf_size_bytes);
 
@@ -442,7 +453,10 @@ setup_format_context(AVFormatContext **format_context_ptr,
                 return VID_DECODE_FFMPEG_ERR;
         }
         status = avformat_find_stream_info(format_context, NULL);
-        assert(status >= 0);
+        // assert(status >= 0);
+        if (status < 0) {
+                PyErr_SetString(PyExc_IOError, "Video find stream info error");
+        }
 
         return find_video_stream_index(format_context);
 }
@@ -543,7 +557,11 @@ seek_to_closest_keypoint(float *seek_distance_out,
                                        vid_ctx->video_stream_index,
                                        timestamp,
                                        AVSEEK_FLAG_BACKWARD);
-        assert(status >= 0);
+        // assert(status >= 0);
+        if (status < 0) {
+                PyErr_SetString(PyExc_IOError, "Video seek frame error");
+        }
+        
 
         return timestamp;
 }
@@ -559,10 +577,14 @@ skip_past_timestamp(struct video_stream_context *vid_ctx, int64_t timestamp)
                 int32_t status = receive_frame(vid_ctx);
                 if (status < 0)
                 {
-                        // fprintf(stderr, "Ran out of frames during seek.\n");
+                        fprintf(stderr, "Ran out of frames during seek.\n");
                         return status;
                 }
-                assert(status == VID_DECODE_SUCCESS);
+                // assert(status == VID_DECODE_SUCCESS);
+                if (status != VID_DECODE_SUCCESS) {
+                        PyErr_SetString(PyExc_IOError, "Video skip past timestamp error");
+                }
+                
         } while (vid_ctx->frame->pts < timestamp);
 
         return VID_DECODE_SUCCESS;
@@ -610,11 +632,18 @@ void decode_video_from_frame_nums(uint8_t *dest,
                                                         NULL,
                                                         NULL);
             
-        assert(sws_context != NULL);
+        // assert(sws_context != NULL);
+        if (sws_context == NULL) {
+                        PyErr_SetString(PyExc_IOError, "Video get context error.");
+        }
+
 
         // resize image
         AVFrame *frame_rgb = allocate_resize_rgb_image(codec_context, *rewidth, *reheight);
-        assert(frame_rgb != NULL);
+        // assert(frame_rgb != NULL);
+        if (frame_rgb == NULL) {
+                        PyErr_SetString(PyExc_IOError, "Video get frame rgb error.");
+        }
 
         int32_t status;
         uint32_t copied_bytes = 0;
@@ -640,7 +669,10 @@ void decode_video_from_frame_nums(uint8_t *dest,
                                        vid_ctx->video_stream_index,
                                        timestamp,
                                        AVSEEK_FLAG_BACKWARD);
-                assert(status >= 0);
+                // assert(status >= 0);
+                if (status < 0) {
+                        PyErr_SetString(PyExc_IOError, "Video seek frame error.");
+                }
 
                 /**
                  * NOTE(brendan): Here we are handling seeking, where we need
@@ -660,10 +692,16 @@ void decode_video_from_frame_nums(uint8_t *dest,
                 status = receive_frame(vid_ctx);
                 if (status == VID_DECODE_EOF)
                         goto out_free_frame_rgb_and_sws;
-                assert(status == VID_DECODE_SUCCESS);
+                // assert(status == VID_DECODE_SUCCESS);
+                if (status != VID_DECODE_SUCCESS) {
+                        PyErr_SetString(PyExc_IOError, "receive frame error.");
+                }
 
                 current_frame_index = vid_ctx->frame->pts / avg_frame_duration;
-                assert(current_frame_index <= frame_numbers[0]);
+                // assert(current_frame_index <= frame_numbers[0]);
+                if (current_frame_index > frame_numbers[0]) {
+                        PyErr_SetString(PyExc_IOError, "current frame index is out of frame numbers");
+                }
 
                 /**
                  * NOTE(brendan): Handle the chance that the seek brought the
@@ -690,8 +728,11 @@ void decode_video_from_frame_nums(uint8_t *dest,
              ++out_frame_index)
         {
                 int32_t desired_frame_num = frame_numbers[out_frame_index];
-                assert((desired_frame_num >= current_frame_index) &&
-                       (desired_frame_num >= 0));
+                // assert((desired_frame_num >= current_frame_index) &&
+                //        (desired_frame_num >= 0));
+                if ((desired_frame_num < current_frame_index) || desired_frame_num < 0) {
+                        PyErr_SetString(PyExc_IOError, "Input frame numbers error");
+                }
                 /* Loop frames instead of aborting if we asked for too many. */
                 if (desired_frame_num > vid_ctx->nb_frames)
                 {
@@ -710,11 +751,14 @@ void decode_video_from_frame_nums(uint8_t *dest,
                                                        vid_ctx->video_stream_index,
                                                        timestamp,
                                                        AVSEEK_FLAG_BACKWARD);
-                                assert(status >= 0);
+                                // assert(status >= 0);
+                                if (status < 0) {
+                                        PyErr_SetString(PyExc_IOError, "Video seek frame error.");
+                                }
                                 avcodec_flush_buffers(vid_ctx->codec_context);
                         }
                         status = receive_frame(vid_ctx);
-                        if (status == VID_DECODE_EOF) {
+                        if (status == VID_DECODE_EOF || status != VID_DECODE_SUCCESS) {
                                 loop_to_buffer_end(dest,
                                                    copied_bytes,
                                                    out_frame_index,
@@ -727,16 +771,16 @@ void decode_video_from_frame_nums(uint8_t *dest,
                          * NOTE: If error occurred when decoded frame，loop end buffer
                          * avoid the damage frame。
                          */
-                        if (status != VID_DECODE_SUCCESS) {
-                                loop_to_buffer_end(dest,
-                                                   copied_bytes,
-                                                   out_frame_index,
-                                                   bytes_per_frame,
-                                                   num_requested_frames);
-                                printf("FFmpeg get frame error.\n");
-                                goto out_free_frame_rgb_and_sws;
+                        // if (status != VID_DECODE_SUCCESS) {
+                        //         loop_to_buffer_end(dest,
+                        //                            copied_bytes,
+                        //                            out_frame_index,
+                        //                            bytes_per_frame,
+                        //                            num_requested_frames);
+                        //         printf("FFmpeg get frame error.\n");
+                        //         goto out_free_frame_rgb_and_sws;
 
-                        }
+                        // }
 
                         /**
                          * NOTE(brendan): Only advance the frame index if the
