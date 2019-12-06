@@ -152,7 +152,10 @@ setup_vid_stream_context_filename(struct video_stream_context *vid_ctx,
                  * Compute nb_frames from fmt ctx duration (microseconds) and
                  * stream FPS (frames/second).
                  */
-                assert(video_stream->avg_frame_rate.den > 0);
+                // assert(video_stream->avg_frame_rate.den > 0);
+                if (video_stream->avg_frame_rate.den <= 0) {
+                        PyErr_SetString(PyExc_IOError, "Read video frame rate error.");
+                }
 
                 enum AVRounding rnd = (enum AVRounding)(AV_ROUND_DOWN |
                                                         AV_ROUND_PASS_MINMAX);
@@ -243,8 +246,12 @@ get_vid_width_height(uint32_t *width,
                 *height = codec_context->height;
         }
 
-        assert(((uint32_t)codec_context->width == *width) &&
-               ((uint32_t)codec_context->height == *height));
+        // assert(((uint32_t)codec_context->width == *width) &&
+        //        ((uint32_t)codec_context->height == *height));
+        if (((uint32_t)codec_context->width != *width) ||
+               ((uint32_t)codec_context->height != *height)){
+                        PyErr_SetString(PyExc_IOError, "Read video width or height error");
+               }
 
         return is_size_dynamic;
 }
