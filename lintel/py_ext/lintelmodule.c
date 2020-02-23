@@ -38,6 +38,7 @@
 
 PyDoc_STRVAR(module_doc, "Module for loading video data.");
 
+// 回调函数
 int32_t interrupt_callback(void *data) {
     struct video_stream_context *vid_ctx = data;
     if (vid_ctx->timeout_start == 0) {
@@ -54,7 +55,7 @@ int32_t interrupt_callback(void *data) {
         }
     }
 }
-        
+
 /**
  * Allocates a PyByteArrayObject, and `out_size_bytes` of buffer for that
  * object.
@@ -104,10 +105,11 @@ setup_vid_stream_context_filename(struct video_stream_context *vid_ctx,
         vid_ctx->format_context = avformat_alloc_context();
         if (vid_ctx->format_context == NULL)
                 goto clean_up_format_context;
+    
+        vid_ctx->timeout_start = time(NULL);
+        vid_ctx->format_context->interrupt_callback.callback = interrupt_callback;
+        vid_ctx->format_context->interrupt_callback.opaque = vid_ctx;
         
-         vid_ctx->timeout_start = time(NULL);
-         vid_ctx->format_context->interrupt_callback.callback = interrupt_callback;
-         vid_ctx->format_context->interrupt_callback.opaque = vid_ctx;        
 
         char buf[1024];
         int32_t status = avformat_open_input(&vid_ctx->format_context, filename,
@@ -427,10 +429,9 @@ frame_count(PyObject *self, PyObject *args, PyObject *kw)
         int64_t frame_num = 0;
 //         int32_t gop_num = 0;
 
-//         static char *kwlist[] = {"filename",
-//                                  "shoule_key",
-//                                  0};
-        static char *kwlist[] = {"filename", 0};
+        static char *kwlist[] = {"filename",
+                                 "shoule_key",
+                                 0};
 
 //         if (!PyArg_ParseTupleAndKeywords(args,
 //                                          kw,
@@ -438,10 +439,9 @@ frame_count(PyObject *self, PyObject *args, PyObject *kw)
 //                                          kwlist,
 //                                          &filename,
 //                                          &should_key))
-//                 return NULL;
         if (!PyArg_ParseTupleAndKeywords(args,
                                          kw,
-                                         "s|p:frame_count",
+                                         "s|p:get_video_frame_num",
                                          kwlist,
                                          &filename))
                 return NULL;
@@ -588,7 +588,7 @@ static PyMethodDef lintel_methods[] = {
          (PyCFunction)frame_count,
          METH_VARARGS | METH_KEYWORDS,
          PyDoc_STR("frame_count(filename) -> "
-                   "frame_num or\n"
+                   "frame_num\n"
                    "if should_key is not passed as arguments")},
         {NULL, NULL, 0, NULL}
 };

@@ -37,6 +37,7 @@ extern "C" {
 #include <stdbool.h>
 #include <time.h>
 
+
 #define VID_DECODE_FFMPEG_ERR (-2)
 #define VID_DECODE_EOF (-1)
 #define VID_DECODE_SUCCESS 0
@@ -45,9 +46,7 @@ struct buffer_data {
         const char *ptr;
         int32_t offset_bytes;
         int32_t total_size_bytes;
-        time_t timeout_start;
 };
-
 
 /**
  * struct video_stream_context - Context needed to decode and receive frames
@@ -66,6 +65,7 @@ struct video_stream_context {
         int32_t video_stream_index;
         int64_t duration;
         int64_t nb_frames;
+        time_t timeout_start;
 };
 
 /**

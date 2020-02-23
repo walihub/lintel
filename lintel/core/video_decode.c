@@ -24,6 +24,9 @@
 #include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
+
+
 /**
  * Receives a complete frame from the video stream in format_context that
  * corresponds to video_stream_index.
@@ -50,7 +53,8 @@ receive_frame(struct video_stream_context *vid_ctx)
                 return VID_DECODE_EOF;
         else if (status != AVERROR(EAGAIN))
                 return VID_DECODE_FFMPEG_ERR;
-
+                    
+        // vid_ctx->timeout_start = time(NULL);
         was_frame_received = false;
         while (!was_frame_received &&
                (av_read_frame(vid_ctx->format_context, &packet) == 0)) {
