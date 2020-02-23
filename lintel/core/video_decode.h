@@ -35,6 +35,7 @@ extern "C" {
 #endif
 #include <stdint.h>
 #include <stdbool.h>
+#include <time.h>
 
 #define VID_DECODE_FFMPEG_ERR (-2)
 #define VID_DECODE_EOF (-1)
@@ -44,6 +45,7 @@ struct buffer_data {
         const char *ptr;
         int32_t offset_bytes;
         int32_t total_size_bytes;
+        time_t timeout_start;
 };
 
 
