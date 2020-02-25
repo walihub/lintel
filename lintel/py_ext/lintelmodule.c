@@ -105,11 +105,11 @@ setup_vid_stream_context_filename(struct video_stream_context *vid_ctx,
         vid_ctx->format_context = avformat_alloc_context();
         if (vid_ctx->format_context == NULL)
                 goto clean_up_format_context;
-    
+
         vid_ctx->timeout_start = time(NULL);
         vid_ctx->format_context->interrupt_callback.callback = interrupt_callback;
         vid_ctx->format_context->interrupt_callback.opaque = vid_ctx;
-        
+
 
         char buf[1024];
         int32_t status = avformat_open_input(&vid_ctx->format_context, filename,
@@ -152,7 +152,7 @@ setup_vid_stream_context_filename(struct video_stream_context *vid_ctx,
         vid_ctx->codec_context = open_video_codec_ctx(video_stream);
         if (vid_ctx->codec_context == NULL)
                 goto clean_up_format_context;
-    
+
         if (vid_ctx->codec_context->pix_fmt == AV_PIX_FMT_NONE)
                 goto clean_up_format_context;
 
@@ -332,7 +332,7 @@ loadvid_frame_nums(PyObject *self, PyObject *args, PyObject *kw)
         struct video_stream_context vid_ctx;
 
         int32_t status = setup_vid_stream_context_filename(&vid_ctx, filename);
-    
+
         if (status != LOADVID_SUCCESS) {
 //                 if (status == LOADVID_ERR_STREAM_INDEX)
 //                         return (PyObject *)frames;
@@ -367,7 +367,7 @@ loadvid_frame_nums(PyObject *self, PyObject *args, PyObject *kw)
                         rewidth = (uint32_t)(resize * width / height);
                 }
         }
-        
+
         const Py_ssize_t num_frames = PySequence_Size(frame_nums);
         PyByteArrayObject *frames = alloc_pyarray(num_frames*rewidth*reheight*3);
         if (PyErr_Occurred() || (frames == NULL))
@@ -376,7 +376,7 @@ loadvid_frame_nums(PyObject *self, PyObject *args, PyObject *kw)
         int32_t *frame_nums_buf = PyMem_RawMalloc(num_frames*sizeof(int32_t));
         if (frame_nums_buf == NULL)
                 return PyErr_NoMemory();
-        
+
         int32_t i;
         for (i = 0;
              i < num_frames;
@@ -427,18 +427,10 @@ frame_count(PyObject *self, PyObject *args, PyObject *kw)
         const char *filename = NULL;
         int32_t should_key = false;
         int64_t frame_num = 0;
-//         int32_t gop_num = 0;
 
         static char *kwlist[] = {"filename",
-                                 "shoule_key",
                                  0};
 
-//         if (!PyArg_ParseTupleAndKeywords(args,
-//                                          kw,
-//                                          "s|p:get_video_keyframe_num",
-//                                          kwlist,
-//                                          &filename,
-//                                          &should_key))
         if (!PyArg_ParseTupleAndKeywords(args,
                                          kw,
                                          "s|p:get_video_frame_num",
@@ -452,17 +444,9 @@ frame_count(PyObject *self, PyObject *args, PyObject *kw)
                 return NULL;
         }
         frame_num = vid_ctx.nb_frames;
-//         if (should_key)
-//         {
-//                 gop_num = get_video_keyframe_count(&vid_ctx);
-//         }
+
         clean_up_vid_ctx(&vid_ctx);
-        
-        /* return result */
-//         if (should_key)
-//         {
-//                 return Py_BuildValue("ii", frame_num, gop_num);       
-//         }
+
         return Py_BuildValue("i", frame_num);
 }
 
@@ -499,7 +483,7 @@ loadvid(PyObject *self, PyObject *args, PyObject *kw)
                 return NULL;
 
         struct video_stream_context vid_ctx;
-        
+
         int32_t status = setup_vid_stream_context_filename(&vid_ctx, filename);
 
         bool is_size_dynamic = get_vid_width_height(&width,
@@ -587,9 +571,8 @@ static PyMethodDef lintel_methods[] = {
         {"frame_count",
          (PyCFunction)frame_count,
          METH_VARARGS | METH_KEYWORDS,
-         PyDoc_STR("frame_count(filename) -> "
-                   "frame_num\n"
-                   "if should_key is not passed as arguments")},
+         PyDoc_STR("frame_count(filename, should_key) -> "
+                   "frame_num")},
         {NULL, NULL, 0, NULL}
 };
 
