@@ -25,7 +25,6 @@ width = 540
 height = 964
 
 filename = '1000016779.mp4'
-filename = "http://ad.us.sinaimg.cn/003G3vKglx07yGAUM0ww010412004Z2L0E010.mp4?label=mp4_ld&template=320x568.25.0&trans_finger=6a03c1693f10c8f154facfffec859f78&Expires=1583567923&ssig=IC6pqXfr4U&KID=unistore,video"
 
 start = time.perf_counter()
 for _ in range(1):
