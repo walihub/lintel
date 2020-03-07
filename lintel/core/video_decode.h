@@ -36,6 +36,7 @@ extern "C" {
 #include <stdint.h>
 #include <stdbool.h>
 #include <time.h>
+#include <Python.h>
 // decode video code
 #define VID_DECODE_SUCCESS 0
 #define VID_DECODE_EOF (-1)
@@ -67,9 +68,11 @@ struct video_stream_context {
         int32_t video_stream_index;
         int64_t duration;
         int64_t nb_frames;
-        time_t timeout_start;
-        int32_t timeout_time;
-        int32_t is_timeout;
+        // add for python exception
+        time_t decode_time;
+        int32_t timeout_sec;
+        PyObject *error_type;
+        char *error_msg;
 };
 
 /**
@@ -81,7 +84,7 @@ struct video_stream_context {
  *
  * @return The number of bytes written to `buffer`.
  */
-int32_t read_memory(void *opaque, uint8_t *buffer, int32_t buf_size_bytes);
+// int32_t read_memory(void *opaque, uint8_t *buffer, int32_t buf_size_bytes);
 
 /**
  * A function for seeking to a specified byte position in a
@@ -93,7 +96,7 @@ int32_t read_memory(void *opaque, uint8_t *buffer, int32_t buf_size_bytes);
  *
  * @return The new offset in the `struct buffer_data` instance after seeking.
  */
-int64_t seek_memory(void *opaque, int64_t offset64, int32_t whence);
+// int64_t seek_memory(void *opaque, int64_t offset64, int32_t whence);
 
 /**
  * Sets up the `AVFormatContext` pointed to by `format_context_ptr`, and finds
@@ -112,17 +115,11 @@ int64_t seek_memory(void *opaque, int64_t offset64, int32_t whence);
  * @return Index of the video stream corresponding to `format_context`, or a
  * negative error code on failure.
  */
-int32_t
-setup_format_context(AVFormatContext **format_context_ptr,
-                     AVIOContext *avio_ctx,
-                     struct buffer_data *input_buf,
-                     const uint32_t buffer_size);
-
-int32_t
-setup_format_context2(AVFormatContext **format_context_ptr,
-                     AVIOContext *avio_ctx,
-                     struct buffer_data *input_buf,
-                     const uint32_t buffer_size);
+// int32_t
+// setup_format_context(AVFormatContext **format_context_ptr,
+//                      AVIOContext *avio_ctx,
+//                      struct buffer_data *input_buf,
+//                      const uint32_t buffer_size);
 
 /**
  * Allocates a codec context for video_stream, and opens it.  We cannot call
@@ -191,7 +188,7 @@ skip_past_timestamp(struct video_stream_context *vid_ctx, int64_t timestamp);
  * @param vid_ctx Context needed to decode frames from the video stream.
  * @param num_requested_frames Number of frames requested to fill into `dest`.
  */
-int32_t
+void
 decode_video_to_out_buffer(uint8_t *dest,
                            struct video_stream_context *vid_ctx,
                            int32_t num_requested_frames);
@@ -215,7 +212,7 @@ decode_video_to_out_buffer(uint8_t *dest,
  * stream, then the initial frames are looped repeatedly until the end of the
  * buffer.
  */
-int32_t
+void
 decode_video_from_frame_nums(uint8_t *dest,
                              struct video_stream_context *vid_ctx,
                              int32_t num_requested_frames,

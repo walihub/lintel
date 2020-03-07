@@ -20,11 +20,14 @@
 /**
  * Load video data.
  */
+#define PY_SSIZE_T_CLEAN
+
 #include "core/video_decode.h"
 #include <libavformat/avformat.h>
 #include <libavutil/imgutils.h>
 #include <libswscale/swscale.h>
 #include <Python.h>
+#include <pythread.h>
 #include <stdbool.h>
 #include <stdlib.h>
 #include <sys/syscall.h>
@@ -32,26 +35,27 @@
 
 #define UNUSED(x) x __attribute__ ((__unused__))
 
+#define DEFAULT_TIMEOUT_SEC 3
+
+
 #define LOADVID_TIMEOUT 1
 #define LOADVID_SUCCESS 0
 #define LOADVID_ERR (-1)
 #define LOADVID_ERR_STREAM_INDEX (-2)
-#define DEFAULT_TIMEOUT_SEC 3
-
-
 
 PyDoc_STRVAR(module_doc, "Module for loading video data.");
 
-// 回调函数
+// callback
 int32_t interrupt_callback(void *data) {
     struct video_stream_context *vid_ctx = data;
-    if (vid_ctx->timeout_start == 0) {
-        vid_ctx->timeout_start =  time(NULL);//start time
+    if (vid_ctx->decode_time == 0) {
+        vid_ctx->decode_time =  time(NULL); //start time
         return LOADVID_SUCCESS;
     } else {
-        int64_t time_use =  time(NULL) - vid_ctx->timeout_start;
-        if (time_use > vid_ctx->timeout_time) {// timeout
-            vid_ctx->is_timeout = LOADVID_TIMEOUT;
+        int64_t time_use =  time(NULL) - vid_ctx->decode_time;
+        if (time_use > vid_ctx->timeout_sec) {// timeout
+            vid_ctx->error_type = PyExc_TimeoutError;
+            vid_ctx->error_msg = "decode video frame timeout.";
 //             printf("decode video timeout.\n");
             return LOADVID_TIMEOUT;
         } else {
@@ -106,12 +110,18 @@ static int32_t
 setup_vid_stream_context_filename(struct video_stream_context *vid_ctx,
                          const char *filename, int32_t timeout)
 {
-        vid_ctx->format_context = avformat_alloc_context();
-        if (vid_ctx->format_context == NULL)
-                goto clean_up_format_context;
+        vid_ctx->timeout_sec = timeout;
+        vid_ctx->error_type = NULL;
+        vid_ctx->decode_time = time(NULL);
     
-        vid_ctx->timeout_time = timeout;
-        vid_ctx->timeout_start = time(NULL);
+        vid_ctx->format_context = avformat_alloc_context();
+        if (vid_ctx->format_context == NULL) {
+                vid_ctx->error_type = PyExc_IOError;
+                vid_ctx->error_msg = "format context not found.";
+                goto clean_up_format_context;        
+        }
+
+        
         vid_ctx->format_context->interrupt_callback.callback = interrupt_callback;
         vid_ctx->format_context->interrupt_callback.opaque = vid_ctx;
 
@@ -122,7 +132,9 @@ setup_vid_stream_context_filename(struct video_stream_context *vid_ctx,
         if (status !=0 )
         {
                 av_strerror(status, buf, 1024);
-                printf("Cannot open the file, error code=%d, error message: %s\n", status, buf);
+//                 printf("Cannot open the file, error code=%d, error message: %s\n", status, buf);
+                vid_ctx->error_type = PyExc_IOError;
+                vid_ctx->error_msg = buf;
                 return LOADVID_ERR;
         }
 
@@ -131,7 +143,9 @@ setup_vid_stream_context_filename(struct video_stream_context *vid_ctx,
         * Retrieve stream information
         */
         if (avformat_find_stream_info(vid_ctx->format_context, NULL) < 0) {
-                printf("Stream index not found.\n");
+//                 printf("Stream index not found.\n");
+                vid_ctx->error_type = PyExc_ValueError;
+                vid_ctx->error_msg = "stream index not found.";
                 goto clean_up_format_context;
         }
 
@@ -148,17 +162,26 @@ setup_vid_stream_context_filename(struct video_stream_context *vid_ctx,
                 if (video_stream->codecpar->codec_type == AVMEDIA_TYPE_VIDEO)
                         break;
         }
-        if (stream_index >= vid_ctx->format_context->nb_streams)
+        if (stream_index >= vid_ctx->format_context->nb_streams) {
+                vid_ctx->error_type = PyExc_IOError;
+                vid_ctx->error_msg = "format context nb_streams not found.";
                 return VID_DECODE_FFMPEG_ERR;
+        }
         vid_ctx->video_stream_index = stream_index;
 
         video_stream = vid_ctx->format_context->streams[vid_ctx->video_stream_index];
         vid_ctx->codec_context = open_video_codec_ctx(video_stream);
-        if (vid_ctx->codec_context == NULL)
+        if (vid_ctx->codec_context == NULL) {
+                vid_ctx->error_type = PyExc_IOError;
+                vid_ctx->error_msg = "codec_context not found.";
                 goto clean_up_format_context;
+        }
 
-        if (vid_ctx->codec_context->pix_fmt == AV_PIX_FMT_NONE)
+        if (vid_ctx->codec_context->pix_fmt == AV_PIX_FMT_NONE) {
+                vid_ctx->error_type = PyExc_IOError;
+                vid_ctx->error_msg = "codec context AV_PIX_FMT_NONE error.";
                 goto clean_up_format_context;
+        }
 
         if ((video_stream->duration <= 0) || (video_stream->nb_frames <= 0)) {
                 /**
@@ -181,7 +204,9 @@ setup_vid_stream_context_filename(struct video_stream_context *vid_ctx,
                  */
                 // assert(video_stream->avg_frame_rate.den > 0);
                 if (video_stream->avg_frame_rate.den <= 0) {
-                        printf("Read video frame rate error.");
+//                         printf("Read video frame rate error.");
+                        vid_ctx->error_type = PyExc_ValueError;
+                        vid_ctx->error_msg = "read video frame rate error.";
                         goto clean_up_format_context;
                 }
 
@@ -223,8 +248,11 @@ setup_vid_stream_context_filename(struct video_stream_context *vid_ctx,
         }
 
         vid_ctx->frame = av_frame_alloc();
-        if (vid_ctx->frame == NULL)
+        if (vid_ctx->frame == NULL) {
+                vid_ctx->error_type = PyExc_IOError;
+                vid_ctx->error_msg = "vid_ctx frame not found";
                 goto clean_up_avcodec;
+        }
 
         return LOADVID_SUCCESS;
 
@@ -265,8 +293,10 @@ clean_up_vid_ctx(struct video_stream_context *vid_ctx)
 static bool
 get_vid_width_height(uint32_t *width,
                      uint32_t *height,
-                     AVCodecContext *codec_context)
+                     struct video_stream_context *vid_ctx)
+                     // AVCodecContext *codec_context)
 {
+        AVCodecContext *codec_context = vid_ctx->codec_context;
         /* NOTE(brendan): If no size is passed, dynamically find size. */
         bool is_size_dynamic = (*width == 0) && (*height == 0);
         if (is_size_dynamic) {
@@ -276,12 +306,15 @@ get_vid_width_height(uint32_t *width,
 
 //         assert(((uint32_t)codec_context->width == *width) &&
 //                ((uint32_t)codec_context->height == *height));
+    
         if (((uint32_t)codec_context->width != *width) ||
-               ((uint32_t)codec_context->height != *height)){
-                        PyErr_SetString(PyExc_IOError,
-                                        "read video width or height error.");
-                        return NULL;
-               }
+               ((uint32_t)codec_context->height != *height))
+        {
+                vid_ctx->error_type = PyExc_ValueError;
+                vid_ctx->error_msg = "load video width or height error";
+        }
+    
+    
         return is_size_dynamic;
 }
 
@@ -337,27 +370,28 @@ loadvid_frame_nums(PyObject *self, PyObject *args, PyObject *kw)
                                 "frame_nums needs to be a sequence");
                 return NULL;
         }
-        if (should_key) {
+        if (should_key)
                 should_seek = false;
-        }
     
-        if (timeout <= 0) {
-            timeout = DEFAULT_TIMEOUT_SEC;
-        }
+        if (timeout <= 0)
+                timeout = DEFAULT_TIMEOUT_SEC;
 
         struct video_stream_context vid_ctx;
-
         int32_t status = setup_vid_stream_context_filename(&vid_ctx, filename, timeout);
 
         if (status != LOADVID_SUCCESS) {
-                PyErr_SetString(PyExc_IOError,
-                                "load video failed.");
+                PyErr_SetString(vid_ctx.error_type, vid_ctx.error_msg);
                 return NULL;
         }
 
         bool is_size_dynamic = get_vid_width_height(&width,
                                                     &height,
-                                                    vid_ctx.codec_context);
+                                                    &vid_ctx);
+    
+        if (vid_ctx.error_type != NULL) {
+                PyErr_SetString(vid_ctx.error_type, vid_ctx.error_msg);
+                return NULL;
+        }
 
         /**
          * TODO(brendan): There is a hole in the logic here, where a bad status
@@ -407,20 +441,16 @@ loadvid_frame_nums(PyObject *self, PyObject *args, PyObject *kw)
 
         result = (PyObject *)frames;
 
-        int32_t decode_status = decode_video_from_frame_nums((uint8_t *)(frames->ob_bytes),
-                                                            &vid_ctx,
-                                                            num_frames,
-                                                            frame_nums_buf,
-                                                            &rewidth,
-                                                            &reheight,
-                                                            should_key,
-                                                            should_seek);
-    
-        if (decode_status == VID_DECODE_TIMEOUT) {
-                PyErr_SetString(PyExc_IOError, "decode_video_from_frame_nums return timeout.");
-                return NULL;
-        } else if (decode_status == VID_DECODE_FFMPEG_ERR) {
-                PyErr_SetString(PyExc_IOError, "decode_video_from_frame_nums return error code.");
+        decode_video_from_frame_nums((uint8_t *)(frames->ob_bytes),
+                                                 &vid_ctx,
+                                                 num_frames,
+                                                 frame_nums_buf,
+                                                 &rewidth,
+                                                 &reheight,
+                                                 should_key,
+                                                 should_seek);
+        if (vid_ctx.error_type != NULL) {
+                PyErr_SetString(vid_ctx.error_type, vid_ctx.error_msg);
                 return NULL;
         }
     
@@ -471,8 +501,7 @@ frame_count(PyObject *self, PyObject *args, PyObject *kw)
         int32_t status = setup_vid_stream_context_filename(&vid_ctx, filename, timeout);
         
         if (status != LOADVID_SUCCESS) {
-                PyErr_SetString(PyExc_IOError,
-                                "load video failed.");
+                PyErr_SetString(vid_ctx.error_type, vid_ctx.error_msg);
                 return NULL;
         }
         frame_num = vid_ctx.nb_frames;
@@ -526,7 +555,12 @@ loadvid(PyObject *self, PyObject *args, PyObject *kw)
 
         bool is_size_dynamic = get_vid_width_height(&width,
                                                     &height,
-                                                    vid_ctx.codec_context);
+                                                    &vid_ctx);
+        // add for width/height error
+        if (vid_ctx.error_type != NULL) {
+                PyErr_SetString(vid_ctx.error_type, vid_ctx.error_msg);
+                return NULL;
+        }
 
         PyByteArrayObject *frames = alloc_pyarray(num_frames*width*height*3);
         if (PyErr_Occurred() || (frames == NULL))
@@ -537,9 +571,11 @@ loadvid(PyObject *self, PyObject *args, PyObject *kw)
                  * NOTE(brendan): In case there was a stream index error,
                  * return a garbage buffer.
                  */
-                if (status == LOADVID_ERR_STREAM_INDEX)
+                if (status == LOADVID_ERR_STREAM_INDEX) {
+                          PyErr_SetString(PyExc_ValueError, "Load video stream index error.");
                           goto return_frames;
-
+                }
+                PyErr_SetString(PyExc_ValueError, "Load video error.");
                 return NULL;
         }
 
@@ -547,6 +583,11 @@ loadvid(PyObject *self, PyObject *args, PyObject *kw)
                                                      &vid_ctx,
                                                      should_random_seek,
                                                      num_frames);
+    
+        if (vid_ctx.error_type != NULL) {
+                PyErr_SetString(vid_ctx.error_type, vid_ctx.error_msg);
+                return NULL;
+        }
 
         /*
          * NOTE(brendan): after this point, the only possible errors are due to
@@ -561,21 +602,20 @@ loadvid(PyObject *self, PyObject *args, PyObject *kw)
         result = (PyObject *)frames;
 
         status = skip_past_timestamp(&vid_ctx, timestamp);
-        if (status != VID_DECODE_SUCCESS)
+        if (status != VID_DECODE_SUCCESS) {
+                PyErr_SetString(PyExc_ValueError, "skip past timestamp error.");
                 goto clean_up_av_frame;
-
-        int32_t decode_status = decode_video_to_out_buffer((uint8_t *)(frames->ob_bytes),
-                                                           &vid_ctx,
-                                                           num_frames);
-        
-        if (decode_status == VID_DECODE_TIMEOUT) {
-                PyErr_SetString(PyExc_IOError, "decode_video_to_out_buffer return timeout.");
-                return NULL;
-        } else if (decode_status == VID_DECODE_FFMPEG_ERR) {
-                PyErr_SetString(PyExc_IOError, "decode_video_to_out_buffer return error code.");
-                return NULL;
         }
 
+        decode_video_to_out_buffer((uint8_t *)(frames->ob_bytes),
+                                               &vid_ctx,
+                                               num_frames);
+        
+        if (vid_ctx.error_type != NULL) {
+                PyErr_SetString(vid_ctx.error_type, vid_ctx.error_msg);
+                return NULL;
+        }
+        
 clean_up_av_frame:
         clean_up_vid_ctx(&vid_ctx);
 

@@ -15,7 +15,7 @@
 """Unit test for loadvid."""
 import random
 import time
-
+import traceback
 import click
 import numpy as np
 from PIL import Image
@@ -25,7 +25,7 @@ width = 540
 height = 964
 
 filename = '1000016779.mp4'
-filename = "http://miaopai.video.weibocdn.com/WREr8YPplx07BpDO3JJu010412008Rvf0E013.mp4?label=mp4_ld&template=640x360.25.0&trans_finger=40a32e8439c5409a63ccf853562a60ef&Expires=1583420628&ssig=o0QCvwSvTc&KID=unistore,video"
+filename = "http://ad.us.sinaimg.cn/003G3vKglx07yGAUM0ww010412004Z2L0E010.mp4?label=mp4_ld&template=320x568.25.0&trans_finger=6a03c1693f10c8f154facfffec859f78&Expires=1583567923&ssig=IC6pqXfr4U&KID=unistore,video"
 
 start = time.perf_counter()
 for _ in range(1):
@@ -40,7 +40,7 @@ for _ in range(1):
                                             frame_nums=frame_nums,
                                             resize=224,
                                             should_key=True,
-                                            timeout=3)
+                                            timeout=1)
         decoded_frames, width, height = result
         print("width: ", width)
         print("height: ", height)
@@ -49,7 +49,8 @@ for _ in range(1):
         decoded_frames = np.reshape(decoded_frames,
                                     newshape=(len(frame_nums), height, width, 3))
     except Exception as err:
-        print('python error: ', str(err))
+        traceback.print_exc()
+        print('python error: ', type(err))
     end = time.perf_counter()
     print('time: {}'.format(end - start))
 

@@ -43,6 +43,8 @@ receive_frame(struct video_stream_context *vid_ctx)
         bool was_frame_received;
 
         av_init_packet(&packet);
+    
+        // vid_ctx->decode_time = time(NULL);
 
         status = avcodec_receive_frame(vid_ctx->codec_context,
                                        vid_ctx->frame);
@@ -50,10 +52,12 @@ receive_frame(struct video_stream_context *vid_ctx)
                 return VID_DECODE_SUCCESS;
         else if (status == AVERROR_EOF)
                 return VID_DECODE_EOF;
-        else if (status != AVERROR(EAGAIN))
+        else if (status != AVERROR(EAGAIN)) {
+                vid_ctx->error_type = PyExc_IOError;
+                vid_ctx->error_msg = "receive video frame error.";
                 return VID_DECODE_FFMPEG_ERR;
+        }
                     
-        vid_ctx->timeout_start = time(NULL);
         was_frame_received = false;
         while (!was_frame_received &&
                (av_read_frame(vid_ctx->format_context, &packet) == 0)) {
@@ -62,6 +66,8 @@ receive_frame(struct video_stream_context *vid_ctx)
                                                      &packet);
                         if (status != 0) {
                                 av_packet_unref(&packet);
+                                vid_ctx->error_type = PyExc_IOError;
+                                vid_ctx->error_msg = "avcodec send packet error.";
                                 return VID_DECODE_FFMPEG_ERR;
                         }
 
@@ -71,6 +77,8 @@ receive_frame(struct video_stream_context *vid_ctx)
                                 was_frame_received = true;
                         } else if (status != AVERROR(EAGAIN)) {
                                 av_packet_unref(&packet);
+                                vid_ctx->error_type = PyExc_IOError;
+                                vid_ctx->error_msg = "avcodec receive frame error.";
                                 return VID_DECODE_FFMPEG_ERR;
                         }
                 }
@@ -81,8 +89,9 @@ receive_frame(struct video_stream_context *vid_ctx)
         if (was_frame_received)
                 return VID_DECODE_SUCCESS;
         
-        if (vid_ctx->is_timeout == 1) {
-                return VID_DECODE_TIMEOUT;
+        if (vid_ctx->error_type != NULL) {
+            printf("ffffff\n");
+                return VID_DECODE_FFMPEG_ERR;
         }
 
         /**
@@ -241,10 +250,10 @@ loop_to_buffer_end(uint8_t *dest,
                    uint32_t bytes_per_frame,
                    int32_t num_requested_frames)
 {
-        printf("Ran out of frames. Looping.\n");
+//         printf("Ran out of frames. Looping.\n");
         if (frame_number == 0)
         {
-                printf("No frames received after seek.\n");
+//                 printf("No frames received after seek.\n");
                 return;
         }
 
@@ -262,11 +271,10 @@ loop_to_buffer_end(uint8_t *dest,
         }
 }
 
-int32_t decode_video_to_out_buffer(uint8_t *dest,
+void decode_video_to_out_buffer(uint8_t *dest,
                                    struct video_stream_context *vid_ctx,
                                    int32_t num_requested_frames)
 {
-        int32_t decode_status = VID_DECODE_SUCCESS;
         AVCodecContext *codec_context = vid_ctx->codec_context;
         struct SwsContext *sws_context = sws_getContext(codec_context->width,
                                                         codec_context->height,
@@ -280,13 +288,17 @@ int32_t decode_video_to_out_buffer(uint8_t *dest,
                                                         NULL);
         // assert(sws_context != NULL);
         if (sws_context == NULL) {
-                return VID_DECODE_FFMPEG_ERR;
+                vid_ctx->error_type = PyExc_IOError;
+                vid_ctx->error_msg = "init sws context error";
+                return;
         }
 
         AVFrame *frame_rgb = allocate_rgb_image(codec_context);
         // assert(frame_rgb != NULL);
         if (frame_rgb == NULL) {
-                return VID_DECODE_FFMPEG_ERR;
+                vid_ctx->error_type = PyExc_IOError;
+                vid_ctx->error_msg = "init frame rgb error";
+                return;
         }
 
         const uint32_t bytes_per_row = 3 * frame_rgb->width;
@@ -309,7 +321,6 @@ int32_t decode_video_to_out_buffer(uint8_t *dest,
                 }
                 // assert(status == VID_DECODE_SUCCESS);
                 if (status != VID_DECODE_SUCCESS) {
-                    decode_status = VID_DECODE_FFMPEG_ERR;
                     goto out_free_frame_rgb_and_sws;
                 }
 
@@ -326,152 +337,151 @@ out_free_frame_rgb_and_sws:
         av_freep(frame_rgb->data);
         av_frame_free(&frame_rgb);
         sws_freeContext(sws_context);
-        return decode_status;
 }
 
-int32_t read_memory(void *opaque, uint8_t *buffer, int32_t buf_size_bytes)
-{
-        struct buffer_data *input_buf = (struct buffer_data *)opaque;
-        int32_t bytes_remaining = (input_buf->total_size_bytes -
-                                   input_buf->offset_bytes);
-        if (bytes_remaining < buf_size_bytes)
-                buf_size_bytes = bytes_remaining;
+// int32_t read_memory(void *opaque, uint8_t *buffer, int32_t buf_size_bytes)
+// {
+//         struct buffer_data *input_buf = (struct buffer_data *)opaque;
+//         int32_t bytes_remaining = (input_buf->total_size_bytes -
+//                                    input_buf->offset_bytes);
+//         if (bytes_remaining < buf_size_bytes)
+//                 buf_size_bytes = bytes_remaining;
 
-        memcpy(buffer,
-               input_buf->ptr + input_buf->offset_bytes,
-               buf_size_bytes);
+//         memcpy(buffer,
+//                input_buf->ptr + input_buf->offset_bytes,
+//                buf_size_bytes);
 
-        input_buf->offset_bytes += buf_size_bytes;
+//         input_buf->offset_bytes += buf_size_bytes;
 
-        return buf_size_bytes;
-}
+//         return buf_size_bytes;
+// }
 
-int64_t seek_memory(void *opaque, int64_t offset64, int32_t whence)
-{
-        struct buffer_data *input_buf = (struct buffer_data *)opaque;
-        int32_t offset = (int32_t)offset64;
+// int64_t seek_memory(void *opaque, int64_t offset64, int32_t whence)
+// {
+//         struct buffer_data *input_buf = (struct buffer_data *)opaque;
+//         int32_t offset = (int32_t)offset64;
 
-        switch (whence)
-        {
-        case SEEK_CUR:
-                input_buf->offset_bytes += offset;
-                break;
-        case SEEK_END:
-                input_buf->offset_bytes = (input_buf->total_size_bytes -
-                                           offset);
-                break;
-        case SEEK_SET:
-                input_buf->offset_bytes = offset;
-                break;
-        case AVSEEK_SIZE:
-                return input_buf->total_size_bytes;
-        default:
-                break;
-        }
+//         switch (whence)
+//         {
+//         case SEEK_CUR:
+//                 input_buf->offset_bytes += offset;
+//                 break;
+//         case SEEK_END:
+//                 input_buf->offset_bytes = (input_buf->total_size_bytes -
+//                                            offset);
+//                 break;
+//         case SEEK_SET:
+//                 input_buf->offset_bytes = offset;
+//                 break;
+//         case AVSEEK_SIZE:
+//                 return input_buf->total_size_bytes;
+//         default:
+//                 break;
+//         }
 
-        return input_buf->offset_bytes;
-}
+//         return input_buf->offset_bytes;
+// }
 
-/**
- * Probes the input video and returns the resulting guessed file format.
- *
- * @param input_buf Buffer tracking the input byte string.
- * @param buffer_size Size allocated for the AV I/O context.
- *
- * @return The guessed file format of the video.
- */
-static AVInputFormat *
-probe_input_format(struct buffer_data *input_buf, const uint32_t buffer_size)
-{
-        const int32_t probe_buf_size_bytes = (buffer_size +
-                                              AVPROBE_PADDING_SIZE);
-        AVProbeData probe_data = {NULL,
-                                  (uint8_t *)av_malloc(probe_buf_size_bytes),
-                                  probe_buf_size_bytes,
-                                  NULL};
-        // assert(probe_data.buf != NULL);
-        if (probe_data.buf == NULL) {
-                PyErr_SetString(PyExc_IOError, "Probedata error.");
-                return NULL;
-        }
+// /**
+//  * Probes the input video and returns the resulting guessed file format.
+//  *
+//  * @param input_buf Buffer tracking the input byte string.
+//  * @param buffer_size Size allocated for the AV I/O context.
+//  *
+//  * @return The guessed file format of the video.
+//  */
+// static AVInputFormat *
+// probe_input_format(struct buffer_data *input_buf, const uint32_t buffer_size)
+// {
+//         const int32_t probe_buf_size_bytes = (buffer_size +
+//                                               AVPROBE_PADDING_SIZE);
+//         AVProbeData probe_data = {NULL,
+//                                   (uint8_t *)av_malloc(probe_buf_size_bytes),
+//                                   probe_buf_size_bytes,
+//                                   NULL};
+//         // assert(probe_data.buf != NULL);
+//         if (probe_data.buf == NULL) {
+//                 PyErr_SetString(PyExc_IOError, "Probedata error.");
+//                 return NULL;
+//         }
         
 
-        memset(probe_data.buf, 0, probe_buf_size_bytes);
+//         memset(probe_data.buf, 0, probe_buf_size_bytes);
 
-        read_memory((void *)input_buf, probe_data.buf, buffer_size);
-        input_buf->offset_bytes = 0;
+//         read_memory((void *)input_buf, probe_data.buf, buffer_size);
+//         input_buf->offset_bytes = 0;
 
-        AVInputFormat *io_format = av_probe_input_format(&probe_data, 1);
-        av_freep(&probe_data.buf);
+//         AVInputFormat *io_format = av_probe_input_format(&probe_data, 1);
+//         av_freep(&probe_data.buf);
 
-        return io_format;
-}
+//         return io_format;
+// }
 
-/**
- * Finds a video stream for the AV format context and returns the associated
- * stream index.
- *
- * @param format_context AV format where video streams should be searched for.
- *
- * @return Index of video stream on success, negative error code on failure.
- */
-static int32_t
-find_video_stream_index(AVFormatContext *format_context)
-{
-        AVStream *video_stream;
+// /**
+//  * Finds a video stream for the AV format context and returns the associated
+//  * stream index.
+//  *
+//  * @param format_context AV format where video streams should be searched for.
+//  *
+//  * @return Index of video stream on success, negative error code on failure.
+//  */
+// static int32_t
+// find_video_stream_index(AVFormatContext *format_context)
+// {
+//         AVStream *video_stream;
 
-        uint32_t stream_index;
-        for (stream_index = 0;
-             stream_index < format_context->nb_streams;
-             ++stream_index)
-        {
-                video_stream = format_context->streams[stream_index];
+//         uint32_t stream_index;
+//         for (stream_index = 0;
+//              stream_index < format_context->nb_streams;
+//              ++stream_index)
+//         {
+//                 video_stream = format_context->streams[stream_index];
 
-                if (video_stream->codecpar->codec_type == AVMEDIA_TYPE_VIDEO)
-                        break;
-        }
+//                 if (video_stream->codecpar->codec_type == AVMEDIA_TYPE_VIDEO)
+//                         break;
+//         }
 
-        if (stream_index >= format_context->nb_streams)
-                return VID_DECODE_FFMPEG_ERR;
+//         if (stream_index >= format_context->nb_streams)
+//                 return VID_DECODE_FFMPEG_ERR;
 
-        return stream_index;
-}
+//         return stream_index;
+// }
 
-int32_t
-setup_format_context(AVFormatContext **format_context_ptr,
-                     AVIOContext *avio_ctx,
-                     struct buffer_data *input_buf,
-                     const uint32_t buffer_size)
-{
-        AVFormatContext *format_context = *format_context_ptr;
+// int32_t
+// setup_format_context(AVFormatContext **format_context_ptr,
+//                      AVIOContext *avio_ctx,
+//                      struct buffer_data *input_buf,
+//                      const uint32_t buffer_size)
+// {
+//         AVFormatContext *format_context = *format_context_ptr;
 
-        format_context->pb = avio_ctx;
-        format_context->flags |= AVFMT_FLAG_CUSTOM_IO;
-        format_context->iformat = probe_input_format(input_buf, buffer_size);
+//         format_context->pb = avio_ctx;
+//         format_context->flags |= AVFMT_FLAG_CUSTOM_IO;
+//         format_context->iformat = probe_input_format(input_buf, buffer_size);
 
-        int32_t status = avformat_open_input(format_context_ptr,
-                                             "",
-                                             format_context->iformat,
-                                             NULL);
-        if (status < 0)
-        {
-                printf("AVERROR: %d, message: %s\n",
-                        status,
-#ifdef __cplusplus
-                        "");
-#else
-                        av_err2str(status));
-#endif // __cplusplus
-                return VID_DECODE_FFMPEG_ERR;
-        }
-        status = avformat_find_stream_info(format_context, NULL);
-        // assert(status >= 0);
-        if (status < 0) {
-                return VID_DECODE_FFMPEG_ERR;
-        }
+//         int32_t status = avformat_open_input(format_context_ptr,
+//                                              "",
+//                                              format_context->iformat,
+//                                              NULL);
+//         if (status < 0)
+//         {
+//                 printf("AVERROR: %d, message: %s\n",
+//                         status,
+// #ifdef __cplusplus
+//                         "");
+// #else
+//                         av_err2str(status));
+// #endif // __cplusplus
+//                 return VID_DECODE_FFMPEG_ERR;
+//         }
+//         status = avformat_find_stream_info(format_context, NULL);
+//         // assert(status >= 0);
+//         if (status < 0) {
+//                 return VID_DECODE_FFMPEG_ERR;
+//         }
 
-        return find_video_stream_index(format_context);
-}
+//         return find_video_stream_index(format_context);
+// }
 
 
 AVCodecContext *open_video_codec_ctx(AVStream *video_stream)
@@ -571,7 +581,9 @@ seek_to_closest_keypoint(float *seek_distance_out,
                                        AVSEEK_FLAG_BACKWARD);
         // assert(status >= 0);
         if (status < 0) {
-                return VID_DECODE_FFMPEG_ERR;
+                vid_ctx->error_type = PyExc_ValueError;
+                vid_ctx->error_msg = "av seek frame value error";
+                return AV_NOPTS_VALUE;
         }
         
 
@@ -621,19 +633,22 @@ skip_past_timestamp(struct video_stream_context *vid_ctx, int64_t timestamp)
 //         return gop_num;
 // }
 
-int32_t decode_video_from_frame_nums(uint8_t *dest,
-                                     struct video_stream_context *vid_ctx,
-                                     int32_t num_requested_frames,
-                                     const int32_t *frame_numbers,
-                                     uint32_t *rewidth,
-                                     uint32_t *reheight,
-                                     bool should_key,
-                                     bool should_seek)
+void decode_video_from_frame_nums(uint8_t *dest,
+                                  struct video_stream_context *vid_ctx,
+                                  int32_t num_requested_frames,
+                                  const int32_t *frame_numbers,
+                                  uint32_t *rewidth,
+                                  uint32_t *reheight,
+                                  bool should_key,
+                                  bool should_seek)
 {
-        int32_t decode_status = VID_DECODE_SUCCESS;
     
-        if (num_requested_frames <= 0)
-                return VID_DECODE_FFMPEG_ERR;
+        if (num_requested_frames <= 0) {
+                vid_ctx->error_type = PyExc_ValueError;
+                vid_ctx->error_msg = "requested frames number error";
+                return;
+        }
+               
         AVCodecContext *codec_context = vid_ctx->codec_context;
         struct SwsContext *sws_context = sws_getContext(codec_context->width,
                                                         codec_context->height,
@@ -648,14 +663,18 @@ int32_t decode_video_from_frame_nums(uint8_t *dest,
             
         // assert(sws_context != NULL);
         if (sws_context == NULL) {
-                return VID_DECODE_FFMPEG_ERR;
+                vid_ctx->error_type = PyExc_IOError;
+                vid_ctx->error_msg = "init sws context error";
+                return;
         }
 
         // resize image
         AVFrame *frame_rgb = allocate_resize_rgb_image(codec_context, *rewidth, *reheight);
         // assert(frame_rgb != NULL);
         if (frame_rgb == NULL) {
-                return VID_DECODE_FFMPEG_ERR;
+                vid_ctx->error_type = PyExc_IOError;
+                vid_ctx->error_msg = "init frame rgb error";
+                return;
         }
 
         int32_t status;
@@ -684,7 +703,9 @@ int32_t decode_video_from_frame_nums(uint8_t *dest,
                                        AVSEEK_FLAG_BACKWARD);
                 // assert(status >= 0);
                 if (status < 0) {
-                        return VID_DECODE_FFMPEG_ERR;
+                        vid_ctx->error_type = PyExc_ValueError;
+                        vid_ctx->error_msg = "av seek frame error";
+                        goto out_free_frame_rgb_and_sws;
                 }
 
                 /**
@@ -704,18 +725,18 @@ int32_t decode_video_from_frame_nums(uint8_t *dest,
                  */
                 status = receive_frame(vid_ctx);
                 if (status == VID_DECODE_EOF)
-                        decode_status = VID_DECODE_EOF;
                         goto out_free_frame_rgb_and_sws;
+            
                 // assert(status == VID_DECODE_SUCCESS);
                 if (status != VID_DECODE_SUCCESS) {
-                        decode_status = VID_DECODE_FFMPEG_ERR;
                         goto out_free_frame_rgb_and_sws;
                 }
 
                 current_frame_index = vid_ctx->frame->pts / avg_frame_duration;
                 // assert(current_frame_index <= frame_numbers[0]);
                 if (current_frame_index > frame_numbers[0]) {
-                        decode_status = VID_DECODE_FFMPEG_ERR;
+                        vid_ctx->error_type = PyExc_ValueError;
+                        vid_ctx->error_msg = "input frame index error";
                         goto out_free_frame_rgb_and_sws;
                 }
 
@@ -747,7 +768,8 @@ int32_t decode_video_from_frame_nums(uint8_t *dest,
                 // assert((desired_frame_num >= current_frame_index) &&
                 //        (desired_frame_num >= 0));
                 if ((desired_frame_num < current_frame_index) || desired_frame_num < 0) {
-                        decode_status = VID_DECODE_FFMPEG_ERR;
+                        vid_ctx->error_type = PyExc_ValueError;
+                        vid_ctx->error_msg = "input frame index error";
                         goto out_free_frame_rgb_and_sws;
                 }
                 /* Loop frames instead of aborting if we asked for too many. */
@@ -758,7 +780,6 @@ int32_t decode_video_from_frame_nums(uint8_t *dest,
                                            out_frame_index,
                                            bytes_per_frame,
                                            num_requested_frames);
-                        decode_status = VID_DECODE_SUCCESS;
                         goto out_free_frame_rgb_and_sws;
                 }
                 while (current_frame_index <= desired_frame_num) {
@@ -771,7 +792,8 @@ int32_t decode_video_from_frame_nums(uint8_t *dest,
                                                        AVSEEK_FLAG_BACKWARD);
                                 // assert(status >= 0);
                                 if (status < 0) {
-                                        decode_status = VID_DECODE_FFMPEG_ERR;
+                                        vid_ctx->error_type = PyExc_ValueError;
+                                        vid_ctx->error_msg = "av seek frame error";
                                         goto out_free_frame_rgb_and_sws;
                                 }
                                 avcodec_flush_buffers(vid_ctx->codec_context);
@@ -783,18 +805,13 @@ int32_t decode_video_from_frame_nums(uint8_t *dest,
                                                    out_frame_index,
                                                    bytes_per_frame,
                                                    num_requested_frames);
-                                decode_status = VID_DECODE_EOF;
                                 goto out_free_frame_rgb_and_sws;
-                        } else if (status == VID_DECODE_TIMEOUT) {
-                                decode_status = VID_DECODE_TIMEOUT;
-                                goto out_free_frame_rgb_and_sws;
-                        } else if (status != VID_DECODE_SUCCESS) {
-                                 decode_status = VID_DECODE_FFMPEG_ERR;
-                                 goto out_free_frame_rgb_and_sws;
                         }
-
-
+                        
                         // assert(status == VID_DECODE_SUCCESS);
+                        if (status != VID_DECODE_SUCCESS)
+                                 goto out_free_frame_rgb_and_sws;
+                    
                         /**
                          * NOTE: If error occurred when decoded frame，loop end buffer
                          * avoid the damage frame。
@@ -843,5 +860,4 @@ out_free_frame_rgb_and_sws:
         av_freep(frame_rgb->data);
         av_frame_free(&frame_rgb);
         sws_freeContext(sws_context);
-        return decode_status;
 }
