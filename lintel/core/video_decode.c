@@ -90,7 +90,6 @@ receive_frame(struct video_stream_context *vid_ctx)
                 return VID_DECODE_SUCCESS;
         
         if (vid_ctx->error_type != NULL) {
-            printf("ffffff\n");
                 return VID_DECODE_FFMPEG_ERR;
         }
 
