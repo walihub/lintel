@@ -44,7 +44,7 @@ receive_frame(struct video_stream_context *vid_ctx)
 
         av_init_packet(&packet);
     
-        // vid_ctx->decode_time = time(NULL);
+        vid_ctx->decode_time = time(NULL);
 
         status = avcodec_receive_frame(vid_ctx->codec_context,
                                        vid_ctx->frame);
